@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scifigbench"
+version = "0.1.0"
+license = "MIT"
+license-files = ["LICENSE"]
+description = "Data loading, visual inputs, and reproducible evaluation for SciFigBench"
+requires-python = ">=3.10"
+dependencies = ["Pillow>=10", "scipy>=1.10", "huggingface-hub>=0.24"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "build>=1"]
+
+[project.scripts]
+scifigbench = "scifigbench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["scifigbench*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
