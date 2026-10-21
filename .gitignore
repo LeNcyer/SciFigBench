@@ -11,3 +11,5 @@ htmlcov/
 .env
 .env.*
 .DS_Store
+scifigbench_runs/
+test-results.xml

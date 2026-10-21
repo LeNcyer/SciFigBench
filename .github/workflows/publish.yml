@@ -1,0 +1,63 @@
+name: Publish to PyPI
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-scifigbench
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Test and build the fixed source Commit
+    uses: ./.github/workflows/tests.yml
+    permissions:
+      contents: read
+
+  publish:
+    name: Publish verified distributions
+    needs: verify
+    if: ${{ github.event_name == 'release' && github.event.action == 'published' && !github.event.release.draft && !github.event.release.prerelease && github.repository == 'LeNcyer/SciFigBench' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/scifigbench
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: python-distributions
+          path: dist
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: release-provenance
+          path: provenance
+      - name: Verify exact built artifacts and source Commit
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          if not __debug__:
+              raise RuntimeError("Publishing verification requires assertions enabled")
+          provenance = json.loads(Path("provenance/build-provenance.json").read_text())
+          assert provenance["package"] == "scifigbench"
+          assert provenance["source_commit"] == os.environ["EXPECTED_COMMIT"]
+          assert not provenance["source_dirty"]
+          files = list(Path("dist").iterdir())
+          assert len(files) == 2 and all(p.is_file() for p in files)
+          actual = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+          assert actual == provenance["artifacts"], "Distribution hash mismatch"
+          PY
+      - name: Publish with GitHub OIDC Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: dist/
+          attestations: true

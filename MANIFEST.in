@@ -1,4 +1,5 @@
 include AGENTS.md
 recursive-include tests *.py *.json *.jsonl
+recursive-include .github *.py *.yml
 global-exclude *.pyc
 global-exclude __pycache__

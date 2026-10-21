@@ -109,3 +109,165 @@ def download_data(*, repo_id: str | None = None, revision: str | None = None,
     state_path.write_text(json.dumps({"repo_id": repo_id, "revision": revision, "scope": verified["scope"],
                                      "dataset_version": verified["dataset_version"]}, indent=2)+"\n", encoding="utf-8")
     return root
+
+
+# The high-level runner uses pinned reference manifests and a sparse image subset.
+# The existing download_data API and its full-subset verification remain unchanged.
+def _resolve_evaluation_revision(repo_id: str, revision: str, *, cache_dir=None,
+                                 local_files_only: bool = False) -> str:
+    if not isinstance(repo_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*", repo_id):
+        raise DownloadError("repo_id must be a Hugging Face owner/repository name")
+    if not isinstance(revision, str) or not revision.strip():
+        raise DownloadError("revision must be a nonempty branch, tag or full Commit SHA")
+    if re.fullmatch(r"[0-9a-fA-F]{40}", revision):
+        return revision.lower()
+    import hashlib
+    from ._run_storage import write_json
+    directory = (Path(cache_dir).expanduser() / ".scifigbench_refs" if cache_dir is not None
+                 else Path.home() / ".cache/scifigbench/revisions")
+    key = hashlib.sha256((repo_id + "\n" + revision).encode("utf-8")).hexdigest()
+    record = directory / (key + ".json")
+    if local_files_only:
+        try:
+            state = json.loads(record.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise DownloadError("Offline revision is not cached. Use a full Commit SHA or resolve the revision online first.") from exc
+        sha = state.get("commit") if isinstance(state, dict) else None
+        if not isinstance(state, dict) or state.get("repo_id") != repo_id or state.get("revision") != revision or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+            raise DownloadError("Invalid cached revision identity")
+        return sha
+    from huggingface_hub import HfApi
+    try:
+        sha = HfApi().repo_info(repo_id=repo_id, repo_type="dataset", revision=revision).sha
+    except Exception as exc:
+        raise DownloadError("Could not resolve the dataset revision to a Commit SHA.") from exc
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise DownloadError("Hub returned an invalid dataset Commit SHA")
+    directory.mkdir(parents=True, exist_ok=True)
+    write_json(record, {"repo_id": repo_id, "revision": revision, "commit": sha})
+    return sha
+
+
+def _hub_evaluation_file(repo_id: str, commit: str, filename: str, *,
+                         cache_dir=None, local_files_only: bool = False) -> Path:
+    from huggingface_hub import hf_hub_download
+    try:
+        return Path(hf_hub_download(
+            repo_id=repo_id, repo_type="dataset", revision=commit, filename=filename,
+            cache_dir=str(Path(cache_dir).expanduser()) if cache_dir is not None else None,
+            local_files_only=local_files_only,
+        ))
+    except Exception as exc:
+        mode = "offline cache" if local_files_only else "Hub"
+        raise DownloadError(f"Required pinned file is unavailable in the {mode}: {filename}. "
+                            "Prepare this Commit's reference manifests and required files online first.") from exc
+
+
+def _existing_evaluation_files(root: Path, expected: dict[str, str]) -> set[str]:
+    """Compare evaluation entries only; unrelated README checksum changes are valid."""
+    local_checks = _checksums(root / "checksums.sha256") if (root / "checksums.sha256").is_file() else None
+    missing = set()
+    for rel, digest in expected.items():
+        if local_checks is not None and local_checks.get(rel) != digest:
+            raise DownloadError(f"Local checksum entry differs from the pinned evaluation data: {rel}")
+        path = root / rel
+        if path.exists() or path.is_symlink():
+            if not path.is_file() or file_sha256(path) != digest:
+                raise DownloadError(f"SHA256 integrity check failed for pinned evaluation data: {rel}. Existing files were not overwritten.")
+        else:
+            missing.add(rel)
+    return missing
+
+
+def _install_evaluation_file(source: Path, root: Path, rel: str, digest: str) -> None:
+    """Install a verified missing file, never replace an existing user's file."""
+    import shutil
+    target = root / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.parent.resolve().is_relative_to(root.resolve()):
+        raise DownloadError(f"Download destination leaves data_root: {rel}")
+    if file_sha256(source) != digest:
+        raise DownloadError(f"SHA256 integrity check failed for pinned download: {rel}")
+    try:
+        with target.open("xb") as dest, source.open("rb") as src:
+            shutil.copyfileobj(src, dest)
+            dest.flush()
+            os.fsync(dest.fileno())
+    except FileExistsError:
+        if not target.is_file() or file_sha256(target) != digest:
+            raise DownloadError(f"Existing file conflicts with pinned download: {rel}") from None
+
+
+def _prepare_evaluation_data(*, repo_id: str, commit: str, data_root=None,
+                             cache_dir=None, local_files_only: bool = False) -> tuple[Path, dict, dict]:
+    """Reuse matching QA even when other documents belong to a newer Hub commit."""
+    checksum_file = _hub_evaluation_file(repo_id, commit, "checksums.sha256",
+                                         cache_dir=cache_dir, local_files_only=local_files_only)
+    checks = _checksums(checksum_file)
+    manifest_file = _hub_evaluation_file(repo_id, commit, "QA/manifest.json",
+                                         cache_dir=cache_dir, local_files_only=local_files_only)
+    if file_sha256(manifest_file) != checks.get("QA/manifest.json"):
+        raise DownloadError("Pinned QA manifest SHA256 mismatch")
+    try:
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise DownloadError("Invalid pinned QA manifest") from exc
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("tasks"), dict):
+        raise DownloadError("Invalid pinned QA manifest tasks")
+    required = {"QA/manifest.json", "QA/checksums.sha256"} | {"QA/" + spec.filename for spec in TASKS.values()}
+    if any(rel not in checks for rel in required):
+        raise DownloadError("Pinned checksum manifest is missing required QA entries")
+    for spec in TASKS.values():
+        entry = manifest["tasks"].get(spec.filename)
+        if (not isinstance(entry, dict) or entry.get("sha256") != checks["QA/" + spec.filename]
+                or not isinstance(entry.get("total_questions"), int)
+                or isinstance(entry["total_questions"], bool) or entry["total_questions"] <= 0):
+            raise DownloadError(f"Invalid pinned QA manifest entry: {spec.filename}")
+    default_root = Path.home() / ".cache/scifigbench/datasets" / repo_id.replace("/", "--") / commit
+    configured = data_root if data_root is not None else os.environ.get("SCIFIGBENCH_DATA_DIR")
+    root = Path(configured).expanduser().resolve() if configured is not None else default_root.resolve()
+    if root.exists() and not root.is_dir():
+        raise DownloadError("data_root must be a directory")
+    expected = {rel: checks[rel] for rel in required}
+    missing = _existing_evaluation_files(root, expected)
+    if missing:
+        if local_files_only:
+            raise DownloadError(f"Offline data_root is missing required QA files: {', '.join(sorted(missing))}")
+        # Use the established QA downloader in a private versioned staging area.
+        # It never writes into a supplied existing dataset root.
+        staging = (Path(cache_dir).expanduser() / ".scifigbench_qa" if cache_dir is not None
+                   else Path.home() / ".cache/scifigbench/qa")
+        staging = staging / repo_id.replace("/", "--") / commit
+        _existing_evaluation_files(staging, expected)
+        download_data(repo_id=repo_id, revision=commit, local_dir=staging,
+                      cache_dir=cache_dir, qa_only=True)
+        _existing_evaluation_files(staging, expected)
+        root.mkdir(parents=True, exist_ok=True)
+        for rel in sorted(missing):
+            _install_evaluation_file(staging / rel, root, rel, checks[rel])
+    if not (root / "checksums.sha256").exists():
+        _install_evaluation_file(checksum_file, root, "checksums.sha256", file_sha256(checksum_file))
+    _existing_evaluation_files(root, expected)
+    rows = load_qa(root)
+    for name, spec in TASKS.items():
+        if sum(q["task"] == name for q in rows) != manifest["tasks"][spec.filename]["total_questions"]:
+            raise DownloadError(f"Pinned QA count mismatch: {name}")
+    return root, checks, manifest
+
+
+def _ensure_evaluation_images(root: Path, rows: list[dict], checks: dict, *,
+                              repo_id: str, commit: str, cache_dir=None,
+                              local_files_only: bool = False) -> dict[str, str]:
+    paths = sorted({q["image_path"] for q in rows})
+    if any(not re.fullmatch(r"images/F[0-9]{6}\.jpg", rel) or rel not in checks for rel in paths):
+        raise DownloadError("Selected image is absent from the pinned checksum manifest")
+    expected = {rel: checks[rel] for rel in paths}
+    missing = _existing_evaluation_files(root, expected)
+    if missing and local_files_only:
+        raise DownloadError(f"Offline data_root is missing {len(missing)} selected images; no model was called.")
+    for rel in sorted(missing):
+        source = _hub_evaluation_file(repo_id, commit, rel, cache_dir=cache_dir,
+                                      local_files_only=local_files_only)
+        _install_evaluation_file(source, root, rel, expected[rel])
+    _existing_evaluation_files(root, expected)
+    return expected

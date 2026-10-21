@@ -3,7 +3,8 @@
 ## Project Overview
 
 This toolkit downloads/loads benchmark data, prepares canonical visual inputs,
-and scores predictions from the user's own VLM. It does not load or run a model.
+and scores predictions from the user's own VLM. Its high-level API can call a
+user-provided model; model weights and inference frameworks remain user-owned.
 
 The benchmark measures three capabilities: content perception (DCP), topology
 reasoning (Edge, Degree and Reach), and information-flow tracing (IFT).
@@ -21,6 +22,7 @@ reasoning (Edge, Degree and Reach), and information-flow tracing (IFT).
 - `src/scifigbench/tasks.py`: public task/file registry.
 - `data.py`, `download.py`: local UTF-8 data contracts and explicit Hub access.
 - `rendering.py`: canonical image rendering and safe model payloads.
+- `runner.py`, `_run_storage.py`: one-call evaluation and strict durable resume.
 - `evaluation.py`, `scoring/`: alignment, reports, approved parsers and metrics.
 - `cli.py`, `__main__.py`: console and module entry points using the same API.
 - `tests/`: offline tests using small synthetic data, without GPU or model APIs.
@@ -61,7 +63,7 @@ scifigbench download --repo-id LeNcyer/SciFigBench --revision main --data-root .
 ```
 
 For a reproducible accepted-data snapshot, replace `main` with the full commit
-`0e7244ab8aef016db34fe0c8fc0598a5eac2f7fe`. A branch such as `main` can change.
+`a884c09770b99e6337c4cb27cee4696773e27d6e`. A branch such as `main` can change.
 
 The default subset is QA + Images. `--annotations` adds annotations; `--qa-only`
 excludes images. The two flags are mutually exclusive. Use `--cache-dir` for the
@@ -76,7 +78,8 @@ scifigbench download --data-root ./qa-only-data --local-files-only --qa-only
 ```
 
 These verify the requested files against checksum and QA manifests. Only the
-requested subset is claimed verified. Importing or evaluating never downloads.
+requested subset is claimed verified. Importing and low-level scoring never download.
+The high-level SciFigBench function fetches verified evaluation inputs on demand.
 Without `--data-root`, use `SCIFIGBENCH_DATA_DIR` or the user's local
 `.cache/scifigbench/data` directory. Paths do not depend on the working directory.
 
@@ -91,6 +94,52 @@ Without `--data-root`, use `SCIFIGBENCH_DATA_DIR` or the user's local
 
 Do not read answers or annotations to fabricate model responses. This package
 provides no model framework, API credentials, or GPU runner.
+
+## One-call Model Evaluation
+
+The public SciFigBench function orchestrates a user-owned synchronous Callable.
+It does not load weights, implement inference frameworks or require vendor SDKs.
+
+    from scifigbench import SciFigBench
+
+    # Quick Test: <=5 QA/task, <=25 Callable calls for all.
+    # Partial scores only, NOT official full Benchmark results.
+    result = SciFigBench(model=model)
+    print(result.scores)
+
+    # Full: 40,670 QA for all tasks; substantial API costs may apply.
+    full = SciFigBench(
+        model=model, max_samples_per_task=None, confirm_full_run=True,
+        model_id="model-checkpoint-and-decoding-config",
+    )
+
+Full selected-task runs require both settings; finite caps covering every
+selected QA cannot bypass confirmation. Counts come from actual verified QA.
+The confirmation flag alone does not expand the default cap. Interrupted Full
+Evaluation is incomplete/partial. Keep these statements consistent with the
+README, function Docstring and error messages.
+
+Only prompt and canonical PIL image are passed to the Callable; it returns raw
+text. Do not add QIDs, paths, answers, GT or metadata to model arguments.
+Model exceptions/non-string outputs preserve progress and stop. Unparseable raw
+text retains frozen scoring and denominator semantics. No automatic retries.
+
+The runner pins the actual Hub Commit, reuses matching evaluation data despite
+unrelated document changes, downloads selected images only, and never requires
+Annotations. Import and the low-level evaluate function stay local-only.
+Offline high-level calls require cached pinned reference manifests and inputs.
+
+New runs require no model_id. For resume, set it from the first call and use
+resume_from with the same data, model/checkpoint/config, sampling and code.
+Only a matching ordered QID plan and implementation hashes can reuse responses.
+Use an accurate model_id; arbitrary Callable weights cannot be inferred.
+Results expose quick/partial/full, per-task scores, counts and Coverage. Never
+invent an overall score or label Quick Test as a full Benchmark result.
+
+Run outputs default to scifigbench_runs/<unique-id>/ and include run.json,
+predictions.jsonl, progress.json and report.json. ModelCallError/RunError expose
+run_dir; KeyboardInterrupt also preserves progress. The OS lock prevents multiple
+writers and is automatically released after process death.
 
 ## Prediction Format
 
@@ -166,4 +215,5 @@ canonical rendering, input isolation, downloads and CLI/API consistency.
 - Record the data version and QA hashes in reports. Do not represent old-input
   predictions as fresh inference on changed benchmark inputs.
 - Keep this package focused on public data loading, visual query preparation
-  and evaluation; model inference and dataset construction are outside its scope.
+  and evaluation. Only orchestrate the user's Callable; model implementations,
+  training and dataset construction remain outside its scope.
