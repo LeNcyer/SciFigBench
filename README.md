@@ -20,7 +20,9 @@
   <a href="https://huggingface.co/datasets/LeNcyer/SciFigBench">
     <img src="https://img.shields.io/badge/🤗%20Hugging%20Face-Dataset-FFD21E" alt="Hugging Face Dataset">
   </a>
-  <img src="https://img.shields.io/badge/PyPI-v0.1.0%20Coming%20Soon-blue" alt="PyPI">
+  <a href="https://pypi.org/project/scifigbench/">
+    <img src="https://img.shields.io/pypi/v/scifigbench" alt="PyPI">
+  </a>
 </p>
 
 <p align="center">
@@ -89,7 +91,7 @@ cd SciFigBench
 pip install .
 ```
 
-Install via PyPI (Coming Soon):
+Install via PyPI:
 
 ```bash
 pip install scifigbench
