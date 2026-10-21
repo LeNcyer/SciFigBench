@@ -119,7 +119,7 @@ result = SciFigBench(
 print(result.scores)
 ```
 
-For advanced configuration, caching, and resuming evaluations, see [AGENTS.md](https://github.com/LeNcyer/SciFigBench/blob/main/AGENTS.md).
+For advanced configuration and resuming evaluations, see [AGENTS.md](https://github.com/LeNcyer/SciFigBench/blob/main/AGENTS.md).
 
 ### 3. Download the Dataset
 
@@ -142,13 +142,6 @@ The toolkit also supports dataset downloads:
 ```bash
 scifigbench download --repo-id LeNcyer/SciFigBench --revision main --data-root ./data
 ```
-
-For reproducibility, replace `revision="main"` above (or CLI `--revision main`)
-with the full accepted-data commit `a884c09770b99e6337c4cb27cee4696773e27d6e`.
-`QA/*` and `images/*.jpg` supply the standard evaluation inputs; the checksum
-files verify their integrity. Optional `annotations/*.json`, `schema.md`, and
-`manifest.jsonl` can be added to `allow_patterns` for annotation research and
-schema/reference information. They are not required for standard evaluation.
 
 ### 4. Run Your VLM
 
@@ -183,11 +176,6 @@ Expected answer text by task:
 | Path-Level Reachability | `true` or `false` |
 | Information-Flow Tracing | JSON list of strings |
 
-The JSONL `response` field always contains the model's **raw text string**, even
-when that text is a JSON list; for example, `"response": "[\"Encoder\", \"Decoder\"]"`.
-
-Models should receive only the task prompt and rendered figure, without reference answers or ground-truth annotations.
-
 ### 5. Evaluate Predictions
 
 Evaluate all five tasks using the official SciFigBench metrics:
@@ -198,8 +186,6 @@ scifigbench evaluate \
     --task all \
     --data-root ./data
 ```
-
-For evaluation on a subset of questions, append `--allow-partial`. The evaluator reports task-specific scores and prediction coverage, clearly distinguishing partial evaluations from full benchmark results. A task with `n_matched=0` has a metric value of JSON `null` (Python `None`); a matched task can legitimately score `0.0`. Only matched questions enter each task's score.
 
 For additional commands and Python API details, refer to [AGENTS.md](https://github.com/LeNcyer/SciFigBench/blob/main/AGENTS.md) or run `scifigbench --help`.
 
