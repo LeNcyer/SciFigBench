@@ -97,86 +97,29 @@ pip install scifigbench
 
 ### 2. One-call Evaluation
 
-Provide your own synchronous callable model with the signature
-**model(prompt: str, image: PIL.Image.Image) -> str**. It receives only the
-official prompt and rendered RGB image and returns raw text. Wrap your preferred
-model SDK yourself; no model vendor SDK is required by SciFigBench.
+Provide your own callable VLM (`model(prompt, image) -> str`). SciFigBench automatically handles data downloading, input rendering, model inference, and evaluation.
 
-    from scifigbench import SciFigBench
+```python
+from scifigbench import SciFigBench
 
-    # model = MyVLM(...)  # Your callable model.
+model = MyVLM(...)  # Your callable VLM
 
-    # Quick Test (default):
-    # Evaluate at most 5 QA per task (25 Callable calls for all five tasks).
-    # Results are partial scores, NOT official full Benchmark results.
-    result = SciFigBench(model=model, task="all")
-    print(result.scores)
+# Quick Test (default): 5 QA per task, up to 25 calls.
+# Partial scores only, NOT official benchmark results.
+result = SciFigBench(model=model)
+print(result.scores)
 
-Quick Test automatically downloads verified QA and only the selected images on
-first use. Installation and import do not download data. Sampling is deterministic
-for the same data Commit, seed and sample limit. Use **seed=0** (the default) or
-provide another integer.
+# Full Evaluation: all 40,670 QA pairs.
+# WARNING: May incur substantial API costs.
+result = SciFigBench(
+    model=model,
+    max_samples_per_task=None,
+    confirm_full_run=True,
+)
+print(result.scores)
+```
 
-**Full Evaluation requires explicit confirmation:**
-
-    # Full Evaluation: all 40,670 QA pairs across five tasks.
-    # WARNING: May trigger 40,670 model Callable calls and substantial API costs.
-    result = SciFigBench(
-        model=model,
-        task="all",
-        max_samples_per_task=None,
-        confirm_full_run=True,
-        model_id="my-model-version-and-decoding-config",
-    )
-
-A single-task full run uses that task's actual QA count (for example, 8,665 for
-edge-level verification). Without both full-run settings, a request covering all
-selected QA raises an error before any model call. A finite limit covering every
-selected QA cannot bypass confirmation. Setting the confirmation flag alone
-does not expand the default Quick Test. Interrupted full runs remain incomplete
-Partial Evaluation, never completed full Benchmark results.
-
-**Scores and coverage.** The result exposes per-task primary scores in the range
-0–1, with no overall five-task score. Its report records **quick / partial / full**,
-actual evaluated counts, each task's total QA count, Coverage and sampling-plan
-completion. Coverage uses the entire selected task as its denominator. Unassessed
-metrics are **None**; actual zero scores remain **0.0**. A single-task full run is
-not the complete five-task Benchmark.
-
-**Data and outputs.** The default dataset Commit is
-**a884c09770b99e6337c4cb27cee4696773e27d6e**. An explicit branch or tag is resolved
-once to a Commit, which is recorded in the report and used for every download.
-Data is cached by repository and Commit. An existing **data_root** is reused
-when its QA, manifests and required images match; unrelated README changes do
-not invalidate evaluation data. Conflicting hashes raise errors without
-overwriting existing data. Annotations are not required or downloaded.
-
-Each call creates a unique directory under **./scifigbench_runs/**, or under
-the parent specified by **output_dir**. It contains **run.json**,
-**predictions.jsonl**, **progress.json**, **report.json**, and **errors.jsonl**
-when an error occurs. Predictions contain only QID and raw response and work
-with the existing evaluator. Obtain paths from **result.run_dir**,
-**result.predictions_path**, and **result.report_path**.
-
-**Errors and resume.** Model exceptions and non-string outputs stop the run,
-save completed responses and raise **ModelCallError** with a **run_dir**
-attribute. Invalid answer text is still scored by the standard parser; it is
-not silently removed from the denominator. No automatic model retries occur.
-
-New runs need no model identifier or storage configuration. To enable resume,
-set a stable **model_id** on the first call, including the checkpoint/model
-version and decoding configuration. Resume with the same parameters and
-**resume_from=previous_run_dir**, omitting **output_dir**. The Toolkit verifies
-the model ID, data Commit/hashes, sampling plan and implementation hashes before
-reusing predictions. Full-run resume still requires explicit confirmation.
-Already saved responses are skipped; a charged response lost before persistence
-may need another call. A model's actual weights cannot be inferred from an
-arbitrary callable, so provide an accurate identifier. Never include credentials
-in it. Only one writer can use a run directory at a time.
-
-Use **local_files_only=True** to avoid network access after the pinned reference
-manifests, QA and selected images have been cached. Missing offline inputs fail
-clearly. Existing low-level loading/scoring remains local-only.
+For advanced configuration, caching, and resuming evaluations, see [AGENTS.md](https://github.com/LeNcyer/SciFigBench/blob/main/AGENTS.md).
 
 ### 3. Download the Dataset
 

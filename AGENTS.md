@@ -121,6 +121,10 @@ README, function Docstring and error messages.
 
 Only prompt and canonical PIL image are passed to the Callable; it returns raw
 text. Do not add QIDs, paths, answers, GT or metadata to model arguments.
+The model is invoked with keyword arguments: `model(prompt=..., image=...)`.
+The image is a new RGB `PIL.Image.Image`, closed after the synchronous call;
+copy it if the model needs to retain it. JSON lists, booleans and integers must
+be returned as raw text strings, not native Python objects.
 Model exceptions/non-string outputs preserve progress and stop. Unparseable raw
 text retains frozen scoring and denominator semantics. No automatic retries.
 
@@ -129,17 +133,84 @@ unrelated document changes, downloads selected images only, and never requires
 Annotations. Import and the low-level evaluate function stay local-only.
 Offline high-level calls require cached pinned reference manifests and inputs.
 
+The defaults below apply to the high-level API; low-level download/CLI options
+are documented separately above.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `task` | `"all"` | All five tasks, or one official task name from the task table. |
+| `max_samples_per_task` | `5` | Positive per-task cap; use `None` only for an explicitly confirmed full run. |
+| `confirm_full_run` | `False` | Must be `True` together with `max_samples_per_task=None` for full evaluation. |
+| `seed` | `0` | Deterministic per-task sampling; does not set the model's generation seed. |
+| `repo_id` | `"LeNcyer/SciFigBench"` | Dataset source. |
+| `revision` | `"a884c09770b99e6337c4cb27cee4696773e27d6e"` | Immutable default data Commit; explicit branches/tags are resolved once and pinned. |
+| `data_root` | `None` | Reuse matching local inputs or select their download destination. |
+| `cache_dir` | `None` | Hugging Face download cache location; separate from the evaluation data directory. |
+| `output_dir` | `None` | Parent of a new unique run directory; defaults to `./scifigbench_runs/`. |
+| `model_id` | `None` | Optional for new runs; required from the first run to enable strict resume. |
+| `resume_from` | `None` | Existing run directory to resume; cannot be combined with `output_dir`. |
+| `local_files_only` | `False` | Reuse cached reference manifests and inputs without network access. |
+
+Without `data_root` or `SCIFIGBENCH_DATA_DIR`, high-level evaluation data lives
+under `~/.cache/scifigbench/datasets/<owner--repo>/<commit>/`. Installation and
+import do not download data. The runner fetches verified QA and only the images
+selected for the run; matching cached files are reused. Hash conflicts are
+errors and existing files are not silently overwritten. The actual Commit and
+data directory are recorded in `result.report["dataset"]`.
+
 New runs require no model_id. For resume, set it from the first call and use
 resume_from with the same data, model/checkpoint/config, sampling and code.
 Only a matching ordered QID plan and implementation hashes can reuse responses.
 Use an accurate model_id; arbitrary Callable weights cannot be inferred.
-Results expose quick/partial/full, per-task scores, counts and Coverage. Never
-invent an overall score or label Quick Test as a full Benchmark result.
+
+The returned `BenchmarkResult` exposes:
+
+- `scores`: primary metric per selected task in the range 0–1; unassessed tasks
+  are `None`, while a genuine zero score is `0.0`. There is no overall score.
+- `evaluation_mode`: `quick`, `partial`, or `full`.
+- `is_full_benchmark`: true only after full completion of all five tasks;
+  full evaluation of one selected task does not constitute the full Benchmark.
+- `report`: task scores, actual evaluated counts, task totals, Coverage,
+  sampling-plan completion and data provenance. Its `evaluation` field preserves
+  the existing evaluator's report when predictions are available.
+- `run_dir`, `predictions_path`, `report_path`: saved output locations.
+
+Coverage is evaluated QA / all QA in the selected task, not the sampled plan.
+Plan completion is saved responses / planned QA. Partial scores retain the
+existing mean over matched questions, not a mean over missing predictions.
+Never label Quick Test or an interrupted full run as a completed Benchmark.
 
 Run outputs default to scifigbench_runs/<unique-id>/ and include run.json,
-predictions.jsonl, progress.json and report.json. ModelCallError/RunError expose
-run_dir; KeyboardInterrupt also preserves progress. The OS lock prevents multiple
-writers and is automatically released after process death.
+predictions.jsonl, progress.json and report.json, plus errors.jsonl on failure.
+Each saved prediction contains only qid and the model's raw response and works
+with the original evaluate/CLI. Model exceptions and non-string outputs raise
+ModelCallError after saving progress; no response is fabricated for the failed
+call. ModelCallError/RunError expose run_dir; KeyboardInterrupt also preserves
+progress. The OS lock prevents multiple writers and is automatically released
+after process death.
+
+Use `output_dir` to choose a parent directory for a new resumable run:
+
+    result = SciFigBench(
+        model=model,
+        model_id="checkpoint-and-decoding-v1",
+        output_dir="./runs",
+    )
+    print(result.run_dir)
+
+After resolving an interruption, use the saved directory from the exception's
+`run_dir` and the same model ID and evaluation settings. Omit `output_dir`:
+
+    result = SciFigBench(
+        model=model,
+        model_id="checkpoint-and-decoding-v1",
+        resume_from="./runs/<saved-run-id>",
+    )
+
+Full-run resume must also repeat `max_samples_per_task=None` and
+`confirm_full_run=True`. Completed responses are skipped; identity mismatches
+are rejected. A response charged by a provider but lost before persistence may
+need another call. Do not put credentials in `model_id`.
 
 ## Prediction Format
 
