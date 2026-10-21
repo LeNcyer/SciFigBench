@@ -37,6 +37,23 @@ def test_partial_CLI_and_explicit_field(dataset,tmp_path):
     assert run(*args,cwd=tmp_path).returncode==2
     proc=run(*args,'--allow-partial',cwd=tmp_path)
     assert proc.returncode==0 and json.loads(proc.stdout)['evaluation_mode']=='Partial Evaluation'
+    report = json.loads(proc.stdout)
+    assert report['tasks']['edge_level_verification']['primary_metric']['value'] is None
+    assert report == evaluate(p, data_root=root, prediction_field='model_answer', allow_partial=True)
+
+
+@pytest.mark.parametrize('exists', [False, True])
+def test_invalid_data_root_CLI_is_actionable_and_fails(tmp_path, exists):
+    root = tmp_path / 'wrong-data'
+    if exists:
+        root.mkdir()
+    predictions = tmp_path / 'predictions.jsonl'
+    predictions.write_text('{"qid":"example","response":"true"}\n', encoding='utf-8')
+    proc = run('evaluate', '--predictions', predictions, '--data-root', root, cwd=tmp_path)
+    assert proc.returncode == 2
+    assert not proc.stdout
+    assert '--data-root' in proc.stderr and 'QA/' in proc.stderr and 'download' in proc.stderr
+    assert 'Traceback' not in proc.stderr
 
 def test_import_has_no_network_and_missing_SciPy_cannot_silently_fallback(tmp_path):
     script="import socket; socket.socket.connect=lambda *a: (_ for _ in ()).throw(RuntimeError('network forbidden')); import scifigbench; print(scifigbench.__version__)"

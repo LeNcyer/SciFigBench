@@ -42,3 +42,17 @@ def test_UTF8_blank_lines_and_duplicate_QA(dataset):
     assert load_qa(root)[0]['prompt']==rows[0]['prompt']
     p.write_text(text+json.dumps(rows[0])+'\n',encoding='utf-8')
     with pytest.raises(DataError,match='Duplicate QA'):load_qa(root)
+
+
+@pytest.mark.parametrize('root_kind', ['missing', 'directory', 'file'])
+def test_invalid_data_root_explains_how_to_obtain_data(tmp_path, root_kind):
+    root = tmp_path / 'not-a-dataset'
+    if root_kind == 'directory':
+        root.mkdir()
+    elif root_kind == 'file':
+        root.write_text('not a dataset', encoding='utf-8')
+    with pytest.raises(FileNotFoundError) as error:
+        load_qa(root)
+    message = str(error.value)
+    assert str(root) in message
+    assert 'QA/' in message and '--data-root' in message and 'download' in message

@@ -10,7 +10,9 @@
        alt="MIT License">
 </a>
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/Paper-Coming%20Soon-grey" alt="Paper">
+  <a href="https://arxiv.org/abs/2610.27087">
+    <img src="https://img.shields.io/badge/arXiv-2610.27087-b31b1b" alt="Paper on arXiv">
+  </a>
   <a href="assets/SciFigBench%20Poster.pdf">
   <img src="https://img.shields.io/badge/Poster-PDF-D14836"
        alt="SciFigBench Conference Poster">
@@ -35,6 +37,7 @@
 ## 🔥 News
 
 - **[Oct. 20, 2026]** 🎉 **SciFigBench is officially released!** Following a second round of human verification, we further strengthened the benchmark's reliability and revised approximately 5.8% of its reference answers.
+- **[Oct. 19, 2026]** 📝 Our [paper is available on arXiv](https://arxiv.org/abs/2610.27087).
 - **[Aug. 21, 2026]** 🎉 Our paper, **SciFigBench: A Benchmark for Scientific Method Figure Understanding**, was accepted to **EMNLP 2026 Main Conference**!
 - **[May 26, 2026]** 📝 We submitted SciFigBench to the **May 2026 ARR cycle**, targeting EMNLP 2026.
 
@@ -95,7 +98,7 @@ pip install scifigbench
 
 ### 2. Download the Dataset
 
-The benchmark dataset is hosted on [Hugging Face](https://huggingface.co/datasets/LeNcyer/SciFigBench). Download the QA pairs and images:
+The benchmark dataset is hosted on [Hugging Face](https://huggingface.co/datasets/LeNcyer/SciFigBench). Download the QA pairs and images from the latest public version:
 
 ```python
 from huggingface_hub import snapshot_download
@@ -103,6 +106,7 @@ from huggingface_hub import snapshot_download
 snapshot_download(
     repo_id="LeNcyer/SciFigBench",
     repo_type="dataset",
+    revision="main",  # Latest public version; this branch can change.
     local_dir="./data",
     allow_patterns=["QA/*", "images/*.jpg", "checksums.sha256"],
 )
@@ -114,7 +118,12 @@ The toolkit also supports dataset downloads:
 scifigbench download --repo-id LeNcyer/SciFigBench --revision main --data-root ./data
 ```
 
-Use a commit SHA as `--revision` for reproducibility. Ground-truth annotations are optional and not required for standard evaluation.
+For reproducibility, replace `revision="main"` above (or CLI `--revision main`)
+with the full accepted-data commit `0e7244ab8aef016db34fe0c8fc0598a5eac2f7fe`.
+`QA/*` and `images/*.jpg` supply the standard evaluation inputs; the checksum
+files verify their integrity. Optional `annotations/*.json`, `schema.md`, and
+`manifest.jsonl` can be added to `allow_patterns` for annotation research and
+schema/reference information. They are not required for standard evaluation.
 
 ### 3. Run Your VLM
 
@@ -139,6 +148,19 @@ Save your model's raw responses as a JSONL file, with one prediction per line:
 {"qid": "0aaf24e73a36", "response": "1"}
 ```
 
+Expected answer text by task:
+
+| Task | Model output format |
+|---|---|
+| Dense Content Perception | JSON list of strings, in query color order |
+| Edge-Level Verification | `true` or `false` |
+| Node-Level Degree Counting | Integer |
+| Path-Level Reachability | `true` or `false` |
+| Information-Flow Tracing | JSON list of strings |
+
+The JSONL `response` field always contains the model's **raw text string**, even
+when that text is a JSON list; for example, `"response": "[\"Encoder\", \"Decoder\"]"`.
+
 Models should receive only the task prompt and rendered figure, without reference answers or ground-truth annotations.
 
 ### 4. Evaluate Predictions
@@ -152,7 +174,7 @@ scifigbench evaluate \
     --data-root ./data
 ```
 
-For evaluation on a subset of questions, append `--allow-partial`. The evaluator reports task-specific scores and prediction coverage, clearly distinguishing partial evaluations from full benchmark results.
+For evaluation on a subset of questions, append `--allow-partial`. The evaluator reports task-specific scores and prediction coverage, clearly distinguishing partial evaluations from full benchmark results. A task with `n_matched=0` has a metric value of JSON `null` (Python `None`); a matched task can legitimately score `0.0`. Only matched questions enter each task's score.
 
 For additional commands and Python API details, refer to [AGENTS.md](AGENTS.md) or run `scifigbench --help`.
 
@@ -169,6 +191,9 @@ If you find our work helpful, please use the following citation.
   title     = {SciFigBench: A Benchmark for Scientific Method Figure Understanding},
   author    = {Wu, Lijia and Li, Zheng and Liu, Yuxuan and Zhang, Jingwen and Zhao, Penghai and Li, Xiang},
   booktitle = {Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing},
-  year      = {2026}
+  year      = {2026},
+  eprint    = {2610.27087},
+  archivePrefix = {arXiv},
+  url       = {https://arxiv.org/abs/2610.27087}
 }
 ```

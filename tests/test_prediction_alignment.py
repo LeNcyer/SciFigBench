@@ -1,3 +1,4 @@
+import json
 import pytest
 from scifigbench import evaluate,load_predictions,PredictionError,DataError
 
@@ -32,3 +33,33 @@ def test_unparseable_text_keeps_matched_denominator(dataset,predictions):
     r=evaluate(predictions,data_root=root)
     d=r['tasks']['dense_content_perception']
     assert d['n_total']==2 and d['n_parse_fail']==1 and d['primary_metric']['value']==.5
+
+
+@pytest.mark.parametrize('matched_task,wrong_response', [
+    ('dense_content_perception', '["Wrong"]'),
+    ('edge_level_verification', 'false'),
+    ('node_level_degree_counting', '999'),
+    ('path_level_reachability', 'true'),
+    ('information_flow_tracing', '[]'),
+])
+def test_partial_unassessed_tasks_are_distinct_from_scored_zero(dataset, matched_task, wrong_response):
+    root, rows = dataset
+    question = next(q for q in rows if q['task'] == matched_task)
+    report = evaluate({question['qid']: wrong_response}, data_root=root,
+                      allow_partial=True, include_details=True)
+    assert report['n_matched'] == 1
+    assert len(report['per_question']) == 1
+    for name, task_report in report['tasks'].items():
+        matched = name == matched_task
+        assert task_report['n_matched'] == int(matched)
+        assert task_report['n_missing_pred'] == task_report['n_qa_total'] - int(matched)
+        assert task_report['coverage'] == int(matched) / task_report['n_qa_total']
+        value = task_report['primary_metric']['value']
+        if matched:
+            assert value == 0.0 and isinstance(value, float)
+        else:
+            assert value is None
+        if name == 'dense_content_perception':
+            assert task_report['additional_metrics']['set-ANLS*']['value'] == (0.0 if matched else None)
+    encoded = json.dumps(report, allow_nan=False)
+    assert 'null' in encoded and json.loads(encoded) == report

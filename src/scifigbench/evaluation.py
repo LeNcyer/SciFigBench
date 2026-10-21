@@ -32,6 +32,8 @@ def evaluate(predictions, *, data_root: str | Path | None = None, task: str = "a
     Predictions may be a JSONL path, a QID-to-raw-text mapping, or iterable of
     objects. Unknown/unselected and duplicate QIDs are errors. Partial mode
     retains the frozen mean over matched questions and reports its coverage.
+    Unassessed task metrics are None (JSON null) when no predictions match;
+    matched tasks always retain numeric scores, including genuine zero scores.
     """
     selected = select_tasks(task)
     root = resolve_data_root(data_root)
@@ -60,9 +62,9 @@ def evaluate(predictions, *, data_root: str | Path | None = None, task: str = "a
                   "n_missing_pred": len(rows)-n, "coverage": n/len(rows), "coverage_pct": 100*n/len(rows),
                   "evaluation_mode": "Partial Evaluation" if n != len(rows) else "Full Evaluation",
                   "n_parse_fail": sum(not r["parse_ok"] for r in scored),
-                  "primary_metric": {"name": TASKS[name].metric, "value": sum(r["score"] for r in scored)/max(n, 1)}}
+                  "primary_metric": {"name": TASKS[name].metric, "value": sum(r["score"] for r in scored)/n if n else None}}
         if name == "dense_content_perception":
-            report["additional_metrics"] = {"set-ANLS*": {"value": sum(r["set_score"] for r in scored)/max(n, 1)}}
+            report["additional_metrics"] = {"set-ANLS*": {"value": sum(r["set_score"] for r in scored)/n if n else None}}
         tasks[name] = report
     manifest_path = root/"QA/manifest.json"
     version = json.loads(manifest_path.read_text(encoding="utf-8")).get("version") if manifest_path.is_file() else None

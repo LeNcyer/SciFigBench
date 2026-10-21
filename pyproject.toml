@@ -8,8 +8,31 @@ version = "0.1.0"
 license = "MIT"
 license-files = ["LICENSE"]
 description = "Data loading, visual inputs, and reproducible evaluation for SciFigBench"
+readme = "README.md"
+authors = [
+    {name = "Lijia Wu"},
+    {name = "Zheng Li"},
+    {name = "Yuxuan Liu"},
+    {name = "Jingwen Zhang"},
+    {name = "Penghai Zhao"},
+    {name = "Xiang Li"},
+]
+keywords = ["benchmark", "scientific-figures", "vision-language-models", "evaluation"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 requires-python = ">=3.10"
 dependencies = ["Pillow>=10", "scipy>=1.10", "huggingface-hub>=0.24"]
+
+[project.urls]
+Homepage = "https://github.com/LeNcyer/SciFigBench"
+Repository = "https://github.com/LeNcyer/SciFigBench"
+Dataset = "https://huggingface.co/datasets/LeNcyer/SciFigBench"
+Paper = "https://arxiv.org/abs/2610.27087"
 
 [project.optional-dependencies]
 test = ["pytest>=8", "build>=1"]

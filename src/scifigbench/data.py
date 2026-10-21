@@ -131,8 +131,15 @@ def validate_qa(row: dict) -> None:
 
 def load_qa(data_root: str | Path | None = None, task: str = "all") -> list[dict]:
     root = resolve_data_root(data_root)
+    selected = select_tasks(task)
+    if not (root/"QA").is_dir():
+        raise FileNotFoundError(
+            f"SciFigBench dataset not found at {root}: expected a QA/ directory. "
+            "Set --data-root (Python: data_root) to the downloaded dataset root, "
+            "or download the data with 'scifigbench download' using --repo-id and --revision."
+        )
     result, seen = [], set()
-    for name in select_tasks(task):
+    for name in selected:
         path = root/"QA"/TASKS[name].filename
         for index, row in enumerate(read_jsonl(path), 1):
             try:

@@ -52,13 +52,16 @@ Supply the dataset source with `--repo-id LeNcyer/SciFigBench` and an explicit
 `--revision` (a branch, tag or commit), or configure `SCIFIGBENCH_REPO_ID` and
 `SCIFIGBENCH_REVISION`. Pin a commit for reproducible downloads.
 
-Once those variables contain the intended dataset source:
+These commands explicitly select the latest public version:
 
 ```bash
-scifigbench download --data-root ./data
-scifigbench download --data-root ./data --qa-only
-scifigbench download --data-root ./data --annotations
+scifigbench download --repo-id LeNcyer/SciFigBench --revision main --data-root ./data
+scifigbench download --repo-id LeNcyer/SciFigBench --revision main --data-root ./data --qa-only
+scifigbench download --repo-id LeNcyer/SciFigBench --revision main --data-root ./data --annotations
 ```
+
+For a reproducible accepted-data snapshot, replace `main` with the full commit
+`0e7244ab8aef016db34fe0c8fc0598a5eac2f7fe`. A branch such as `main` can change.
 
 The default subset is QA + Images. `--annotations` adds annotations; `--qa-only`
 excludes images. The two flags are mutually exclusive. Use `--cache-dir` for the
@@ -113,6 +116,11 @@ python -m scifigbench evaluate --predictions legacy.jsonl --task all --data-root
 
 Full coverage of selected QA is required by default. Partial mode reports matched
 and missing counts and coverage; its denominator remains the matched questions.
+For a task with `n_matched=0`, `primary_metric.value` is JSON `null` (Python
+`None`), as is DCP's `additional_metrics["set-ANLS*"].value` when unassessed.
+Matched tasks retain numeric values, including genuine `0.0` scores. JSON/API
+consumers must check for `null`/`None` before formatting or comparing a metric;
+`n_matched`, `n_missing_pred`, `coverage`, and `coverage_pct` remain numeric.
 No undefined overall five-task score is produced. `--include-details` adds the
 per-question results. `--no-latex-normalize` explicitly selects the existing
 normalization-off scoring option.
