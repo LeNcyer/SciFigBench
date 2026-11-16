@@ -79,6 +79,8 @@ SciFigBench also provides human-verified content and structural annotations for 
 
 **Note on reported results.** The paper reports results on an earlier QA version. Retrospective evaluations show modest score changes, with relative model performance trends and main conclusions remaining largely consistent.
 
+**If you like our project, please kindly give us a star ⭐ on GitHub.**
+
 <a id="quick-start"></a>
 
 ## 🚀 Quick Start
