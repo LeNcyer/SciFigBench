@@ -1,6 +1,10 @@
 <h1 align="center">🔬 SciFigBench</h1>
 
 <p align="center">
+  <strong>English</strong> · <a href="https://github.com/LeNcyer/SciFigBench/blob/main/docs/README_CN.md">简体中文</a> · <a href="https://zhuanlan.zhihu.com/p/2104932244280366850">中文解读</a>
+</p>
+
+<p align="center">
   <strong>Evaluating VLMs' Understanding of Scientific Method Figures.</strong>
 </p>
 
